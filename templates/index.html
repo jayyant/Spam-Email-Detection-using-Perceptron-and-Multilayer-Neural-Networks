@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spam Detection Lab</title>
+<style>
+:root{--bg:#f5f7fb;--card:#fff;--text:#1d2433;--muted:#667085;--line:#e3e8f0;--accent:#2f5bea;--accent2:#1f3fb0;--spam:#d6453d;--ham:#2a8f5b;--code:#0f172a}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1420;--card:#171e2e;--text:#e8ecf4;--muted:#93a0b8;--line:#2a3348;--accent:#6b8cff;--accent2:#8fa8ff;--spam:#ff6b61;--ham:#4cc38a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{padding:28px 20px 8px;max-width:1150px;margin:auto}
+h1{margin:0;font-size:26px}
+header p{margin:4px 0 0;color:var(--muted)}
+main{max-width:1150px;margin:auto;padding:12px 20px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-top:16px}
+.card h2{margin:0 0 12px;font-size:17px}
+.controls{display:flex;flex-wrap:wrap;gap:16px;align-items:end}
+label{display:flex;flex-direction:column;font-size:12px;color:var(--muted);gap:4px}
+input[type=number],textarea{background:var(--bg);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;width:130px}
+textarea{width:100%;min-height:110px;resize:vertical}
+.chk{flex-direction:row;align-items:center;gap:8px;font-size:13px;color:var(--text)}
+button{background:var(--accent);color:#fff;border:0;border-radius:10px;padding:11px 22px;font:600 15px inherit;cursor:pointer}
+button:hover{background:var(--accent2)}button:disabled{opacity:.55;cursor:not-allowed}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent);padding:8px 14px;font-size:13px}
+.bar{height:10px;background:var(--line);border-radius:6px;overflow:hidden;margin:14px 0 10px}
+.bar>div{height:100%;width:0;background:var(--accent);transition:width .4s}
+pre.log{margin:0;background:var(--code);color:#cfe3ff;border-radius:10px;padding:12px;max-height:200px;overflow:auto;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.kpi{border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.kpi .v{font-size:24px;font-weight:700}.kpi .l{font-size:12px;color:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12px}
+tr.best td{font-weight:700}
+td.top{color:var(--ham);font-weight:700}
+.wrap{overflow-x:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px}
+.fig{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}
+.fig img{width:100%;display:block}.fig .cap{font-size:12px;color:#555;margin-top:6px}
+.tags span{display:inline-block;padding:2px 9px;margin:2px;border-radius:99px;font-size:12px}
+.tags .s{background:rgba(214,69,61,.14);color:var(--spam)}.tags .h{background:rgba(42,143,91,.14);color:var(--ham)}
+.pred{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:12px}
+.pred div{border:1px solid var(--line);border-radius:10px;padding:10px}
+.pred b{font-size:18px}.pred .spam{color:var(--spam)}.pred .ham{color:var(--ham)}
+.note{color:var(--muted);font-size:12.5px;margin-top:8px}
+.hidden{display:none}
+.err{color:var(--spam);font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1>Spam Detection Lab</h1>
+  <p>Perceptron vs Multilayer Neural Networks on the Enron-Spam e-mail dataset</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1 &middot; Run the experiment</h2>
+    <div class="controls">
+      <label>Test split<input id="test" type="number" min="0.1" max="0.5" step="0.05" value="0.2"></label>
+      <label>TF-IDF features<input id="feat" type="number" min="500" max="20000" step="500" value="5000"></label>
+      <label>Random seed<input id="seed" type="number" value="42"></label>
+      <label class="chk"><input id="cv" type="checkbox"> Include 5-fold cross-validation (slower)</label>
+      <button id="run">&#9654; Run experiment</button>
+    </div>
+    <div class="bar"><div id="bar"></div></div>
+    <pre class="log" id="log">Ready. Press the button to train all models. A typical run takes about a minute (a few extra minutes with cross-validation). The dataset is downloaded automatically the first time.</pre>
+    <div id="err" class="err"></div>
+  </section>
+
+  <div id="out" class="hidden">
+    <section class="card"><h2>2 &middot; Headline numbers</h2><div class="kpis" id="kpis"></div></section>
+
+    <section class="card"><h2>3 &middot; Model comparison</h2>
+      <div class="wrap"><table id="tbl"></table></div>
+      <div class="note">Spam is the positive class. Green marks the best value in each column (for errors and time, the lowest). Differences of a few e-mails are within normal run-to-run noise.</div>
+    </section>
+
+    <section class="card"><h2>4 &middot; Charts</h2><div class="grid" id="figs"></div></section>
+
+    <section class="card hidden" id="cvcard"><h2>5 &middot; Cross-validation (F1, 5 folds)</h2><div class="wrap"><table id="cvtbl"></table></div></section>
+
+    <section class="card"><h2>6 &middot; What the perceptron learned</h2>
+      <div><b style="color:var(--spam)">Spam words:</b> <span class="tags" id="ts"></span></div>
+      <div style="margin-top:6px"><b style="color:var(--ham)">Ham words:</b> <span class="tags" id="th"></span></div>
+      <div class="note">Ham words such as company names and employee first names come from the Enron mailboxes themselves &mdash; the models partly learn the style of this corpus.</div>
+    </section>
+
+    <section class="card"><h2>7 &middot; Dataset</h2><div class="kpis" id="ds"></div></section>
+
+    <section class="card"><h2>8 &middot; Try your own e-mail</h2>
+      <textarea id="txt" placeholder="Paste an e-mail subject and body here..."></textarea>
+      <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button id="pred">Classify</button>
+        <button class="ghost" data-ex="Subject: URGENT!!! You have won $1,000,000. Click http://claim-prize.example now to claim your free gift. Limited offer, buy cheap pills and software today!">Spam example</button>
+        <button class="ghost" data-ex="Subject: Meeting tomorrow. Hi Vince, can we move the energy forecast review to 3 pm? Please let me know if that works and I will send the updated report before then.">Ham example</button>
+      </div>
+      <div class="pred" id="predout"></div>
+    </section>
+  </div>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+const pct=x=>(x*100).toFixed(2)+'%', f4=x=>x.toFixed(4);
+let timer=null;
+
+$('run').onclick=async()=>{
+  $('err').textContent='';
+  const body={test_size:+$('test').value,max_features:+$('feat').value,seed:+$('seed').value,cv:$('cv').checked};
+  const r=await fetch('/api/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  if(!r.ok){$('err').textContent=(await r.json()).error;return;}
+  $('run').disabled=true;$('run').textContent='Running...';$('out').classList.add('hidden');
+  timer=setInterval(poll,1000);poll();
+};
+async function poll(){
+  const s=await (await fetch('/api/status')).json();
+  $('bar').style.width=s.progress+'%';
+  const l=$('log');l.textContent=s.log.join('\n');l.scrollTop=l.scrollHeight;
+  if(s.status==='done'){clearInterval(timer);reset();show(await (await fetch('/api/result')).json());}
+  if(s.status==='error'){clearInterval(timer);reset();$('err').textContent='Error: '+s.error;}
+}
+function reset(){$('run').disabled=false;$('run').innerHTML='&#9654; Run again';}
+
+function show(R){
+  $('out').classList.remove('hidden');
+  const names=Object.keys(R.res), M=R.res;
+  const best=(k,low)=>names.reduce((a,b)=>((low?M[b][k]<M[a][k]:M[b][k]>M[a][k])?b:a));
+  const errs=n=>M[n].fp+M[n].fn;
+  const bestAcc=best('accuracy');
+  $('kpis').innerHTML=[
+    [pct(M[bestAcc].accuracy),'Best accuracy ('+bestAcc+')'],
+    [f4(M[best('f1')].f1),'Best F1-score ('+best('f1')+')'],
+    [f4(M[best('auc')].auc),'Best ROC-AUC ('+best('auc')+')'],
+    [names.reduce((a,b)=>errs(b)<errs(a)?b:a)+': '+Math.min(...names.map(errs)),'Fewest wrong e-mails (of '+R.info.test+')'],
+    [(M['MLP (128-64)'].train_time/Math.max(M['Perceptron'].train_time,1e-6)).toFixed(0)+'\u00d7','MLP training time vs perceptron']
+  ].map(([v,l])=>`<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join('');
+
+  const cols=[['accuracy','Accuracy',pct,0],['precision','Precision',f4,0],['recall','Recall',f4,0],['f1','F1',f4,0],['auc','ROC-AUC',f4,0]];
+  let h='<tr><th>Model</th>'+cols.map(c=>`<th>${c[1]}</th>`).join('')+'<th>FP</th><th>FN</th><th>Errors</th><th>Epochs</th><th>Train time</th></tr>';
+  const bests=Object.fromEntries(cols.map(c=>[c[0],best(c[0])]));
+  const bErr=names.reduce((a,b)=>errs(b)<errs(a)?b:a), bT=best('train_time',true);
+  names.forEach(n=>{const m=M[n];
+    h+=`<tr><td>${n}</td>`+cols.map(c=>`<td class="${bests[c[0]]===n?'top':''}">${c[2](m[c[0]])}</td>`).join('')
+     +`<td>${m.fp}</td><td>${m.fn}</td><td class="${bErr===n?'top':''}">${errs(n)}</td><td>${m.epochs??'\u2013'}</td><td class="${bT===n?'top':''}">${m.train_time.toFixed(3)} s</td></tr>`;});
+  $('tbl').innerHTML=h;
+
+  const caps={comparison:'Accuracy, precision, recall and F1 for every model',confusion:'Confusion matrices of the neural models (rows = actual class)',roc:'ROC curves, zoomed to the region where models differ',curves:'MLP training loss and validation accuracy per epoch',time:'Training cost per model',features:'Highest-weighted words in the perceptron',classdist:'Spam / ham balance after cleaning'};
+  $('figs').innerHTML=Object.keys(caps).map(k=>`<div class="fig"><img src="${R.figs[k]}" alt="${caps[k]}"><div class="cap">${caps[k]}</div></div>`).join('');
+
+  const cv=R.cv;
+  if(Object.keys(cv).length){
+    $('cvcard').classList.remove('hidden');
+    $('cvtbl').innerHTML='<tr><th>Model</th><th>Mean F1</th><th>Std dev</th><th>Folds</th></tr>'+Object.entries(cv).map(([n,c])=>`<tr><td>${n}</td><td>${f4(c.mean)}</td><td>\u00b1 ${f4(c.std)}</td><td>${c.folds.map(f4).join(', ')}</td></tr>`).join('');
+  } else $('cvcard').classList.add('hidden');
+
+  $('ts').innerHTML=R.top_spam.map(w=>`<span class="s">${w}</span>`).join('');
+  $('th').innerHTML=R.top_ham.map(w=>`<span class="h">${w}</span>`).join('');
+  const I=R.info;
+  $('ds').innerHTML=[[I.raw_rows,'Original e-mails'],[I.after_dedup,'After cleaning & de-duplication'],[I.spam,'Spam'],[I.ham,'Ham'],[I.train+' / '+I.test,'Train / test'],[I.features,'TF-IDF features'],[I.avg_words,'Avg. words per e-mail']]
+    .map(([v,l])=>`<div class="kpi"><div class="v">${Number(v)?Number(v).toLocaleString():v}</div><div class="l">${l}</div></div>`).join('');
+  $('out').scrollIntoView({behavior:'smooth'});
+}
+
+$('pred').onclick=async()=>{
+  const r=await fetch('/api/predict',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:$('txt').value})});
+  const d=await r.json();
+  if(!r.ok){$('predout').innerHTML=`<div class="err">${d.error}</div>`;return;}
+  $('predout').innerHTML=Object.entries(d).map(([n,v])=>`<div><div class="note" style="margin:0">${n}</div><b class="${v.label}">${v.label.toUpperCase()}</b><div class="note" style="margin:0">spam score ${(v.score*100).toFixed(1)}%</div></div>`).join('');
+};
+document.querySelectorAll('[data-ex]').forEach(b=>b.onclick=()=>{$('txt').value=b.dataset.ex;});
+</script>
+</body>
+</html>
