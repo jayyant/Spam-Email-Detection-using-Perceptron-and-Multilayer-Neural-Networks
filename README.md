@@ -84,7 +84,3 @@ docs/                           Project report (.docx)
 ## Dataset and references
 
 Data: [Enron-Spam CSV](https://github.com/MWiechmann/enron_spam_data), built on the Enron corpus (Klimt and Yang, 2004) and the Enron-Spam benchmark (Metsis et al., 2006). Key background: Rosenblatt (1958) on the perceptron, Rumelhart, Hinton and Williams (1986) on back-propagation, and Salton and Buckley (1988) on TF-IDF. The full reference list is in the project report; please verify citations before reuse.
-
-## License
-
-Add your preferred license (e.g. MIT) and a `LICENSE` file. The dataset has its own terms.
